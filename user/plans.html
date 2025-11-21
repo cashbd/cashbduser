@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plans - CASHBD</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h2 style="text-align:center; margin-bottom:20px; color:var(--accent)">Investment Plans</h2>
+        <div id="plansList">
+            <div style="text-align:center; color:#888; margin-top:50px;">Loading Plans...</div>
+        </div>
+    </div>
+
+    <div class="navbar">
+        <a href="dashboard.html" class="nav-item"><i class="fas fa-home"></i>Home</a>
+        <a href="plans.html" class="nav-item active"><i class="fas fa-rocket"></i>Plans</a>
+        <a href="deposit.html" class="nav-item"><i class="fas fa-wallet"></i>Wallet</a>
+        <a href="referral.html" class="nav-item"><i class="fas fa-users"></i>Ref</a>
+        <a href="profile.html" class="nav-item"><i class="fas fa-user"></i>Profile</a>
+    </div>
+
+    <div id="toast"></div>
+    <script src="firebase.js"></script>
+    <script src="script.js"></script>
+    <script>
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                // 1. FETCH USER PLANS FIRST
+                db.ref('users/' + user.uid + '/plans').once('value', userPlansSnap => {
+                    
+                    // Create a list of IDs the user currently owns
+                    let ownedPlanIds = [];
+                    if (userPlansSnap.exists()) {
+                        userPlansSnap.forEach(child => {
+                            const planData = child.val();
+                            // Only consider active plans
+                            if(planData.activeUntil > Date.now()) {
+                                ownedPlanIds.push(planData.planId);
+                            }
+                        });
+                    }
+
+                    // 2. FETCH ALL SYSTEM PLANS
+                    loadPlans(ownedPlanIds);
+                });
+            }
+        });
+
+        function loadPlans(ownedIds) {
+            db.ref('plans').on('value', snap => {
+                const div = document.getElementById('plansList');
+                div.innerHTML = '';
+                
+                if (!snap.exists()) {
+                    div.innerHTML = '<p style="text-align:center; color:#888;">No plans available.</p>';
+                    return;
+                }
+
+                snap.forEach(child => {
+                    const p = child.val();
+                    const planId = child.key; // The database key of the plan
+                    
+                    // Calculate Total Return
+                    const totalReturn = (parseFloat(p.dailyReward) * parseFloat(p.validityDays)).toFixed(0);
+                    
+                    // Check if user owns this plan ID
+                    const isOwned = ownedIds.includes(planId);
+
+                    // Dynamic Button
+                    let btnHtml = '';
+                    if (isOwned) {
+                        btnHtml = `<button class="btn" style="background:#333; color:#888; cursor:not-allowed;" disabled>
+                            Already Active - চালু আছে
+                        </button>`;
+                    } else {
+                        btnHtml = `<button class="btn" onclick="buyPlan('${planId}', '${p.title}', ${p.price}, ${p.dailyReward}, ${p.validityDays})">
+                            Buy Plan - কিনুন
+                        </button>`;
+                    }
+
+                    div.innerHTML += `
+                    <div class="card" style="border-top: 3px solid var(--primary);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                            <h3 style="color:var(--accent); margin:0;">${p.title}</h3>
+                            <span style="background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:5px; font-size:0.8rem;">
+                                ${p.validityDays} Days
+                            </span>
+                        </div>
+                        
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:8px;">
+                            <span style="color:#aaa;">Price:</span>
+                            <span style="color:#fff; font-weight:bold; font-size:1.1rem;">৳ ${p.price}</span>
+                        </div>
+
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span style="color:#aaa;">Daily Income:</span>
+                            <span style="color:var(--green);">৳ ${p.dailyReward}</span>
+                        </div>
+
+                        <div style="background:rgba(255,69,0,0.1); padding:10px; border-radius:8px; margin-top:5px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:var(--primary); font-size:0.9rem; font-weight:bold;">Total Return:</span>
+                            <span style="color:#fff; font-weight:bold; font-size:1.1rem;">৳ ${totalReturn}</span>
+                        </div>
+
+                        ${btnHtml}
+                    </div>`;
+                });
+            });
+        }
+
+        function buyPlan(planId, title, price, daily, days) {
+            const user = auth.currentUser;
+            if(!confirm(`Confirm Buy: ${title} for ৳${price}?`)) return;
+
+            db.ref('users/' + user.uid).once('value', snap => {
+                const u = snap.val();
+                
+                // Check Balance
+                if(parseFloat(u.balance) < parseFloat(price)) {
+                    alert("Insufficient Balance! — অপর্যাপ্ত ব্যালেন্স");
+                    window.location.href = `deposit.html?amount=${price}`;
+                    return;
+                }
+
+                // Logic variables
+                const now = Date.now();
+                const validUntil = now + (days * 86400000); // 86400000 = 1 Day in ms
+                
+                // Updates
+                const updates = {};
+                updates[`users/${user.uid}/balance`] = parseFloat(u.balance) - parseFloat(price);
+                
+                // Create Plan Instance
+                // We MUST save the original 'planId' to check for duplicates later
+                const instanceId = Date.now();
+                updates[`users/${user.uid}/plans/${instanceId}`] = {
+                    planId: planId, // Crucial for the "Already Active" check
+                    title: title,
+                    price: price,
+                    dailyReward: daily,
+                    validityDays: days,
+                    startDate: now,
+                    lastRewardDate: now, // Reward starts tomorrow 1 PM
+                    activeUntil: validUntil
+                };
+
+                db.ref().update(updates).then(() => {
+                    showToast("Plan Activated! — সফল");
+                    setTimeout(() => window.location.reload(), 1500);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

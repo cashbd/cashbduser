@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - CASHBD</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div class="container" style="padding-top: 30px;">
+        <h2 style="text-align:center; margin-bottom:20px;">Register - রেজিস্টার</h2>
+        <div class="card">
+            <form id="regForm">
+                <div class="input-group">
+                    <label>Full Name</label>
+                    <input type="text" id="name" placeholder="e.g. Md Alamin" required>
+                </div>
+                <div class="input-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="phone" placeholder="01XXXXXXXXX" required>
+                </div>
+                <div class="input-group">
+                    <label>Email</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                
+                <div class="input-group" style="border: 1px solid var(--accent); padding: 10px; border-radius: 8px;">
+                    <label style="color: var(--accent);">Referral Code (Optional)</label>
+                    <input type="text" id="refCode" placeholder="Enter Code" style="background: #222; color: white; border: 1px solid #555;">
+                </div>
+
+                <button type="submit" class="btn">Register - অ্যাকাউন্ট খুলুন</button>
+            </form>
+            <p style="text-align:center; margin-top:15px; font-size:0.9rem;">
+                Already have an account? <a href="login.html" style="color:var(--accent)">Login</a>
+            </p>
+        </div>
+    </div>
+    <div id="toast"></div>
+    
+    <script src="firebase.js"></script>
+    <!-- Note: script.js NOT included here to prevent early redirect -->
+    
+    <script>
+        function showToast(msg) {
+            const x = document.getElementById("toast");
+            x.innerText = msg; x.className = "show";
+            setTimeout(() => x.className = x.className.replace("show", ""), 3000);
+        }
+
+        // Auto-fill Refer Code
+        const urlParams = new URLSearchParams(window.location.search);
+        const refParam = urlParams.get('ref');
+        if(refParam && refParam !== "undefined" && refParam !== "null") {
+            document.getElementById('refCode').value = refParam;
+        }
+
+        document.getElementById('regForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value.trim();
+            const pass = document.getElementById('password').value.trim();
+            const name = document.getElementById('name').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            let referredBy = document.getElementById('refCode').value.trim();
+            if(!referredBy) referredBy = "admin";
+            
+            const btn = document.querySelector('button[type="submit"]');
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            auth.createUserWithEmailAndPassword(email, pass).then((cred) => {
+                const uid = cred.user.uid;
+                const ts = firebase.database.ServerValue.TIMESTAMP;
+
+                // Count Users
+                const countRef = db.ref('settings/stats/totalUsers');
+                
+                countRef.transaction((current) => {
+                    return (current || 0) + 1;
+                }, (error, committed, snapshot) => {
+                    
+                    let serialId = 1;
+                    if (committed && snapshot.val()) {
+                        serialId = snapshot.val();
+                    } else {
+                        serialId = Math.floor(Math.random() * 10000); // Failsafe
+                    }
+
+                    // Generate Code: Name (5 chars) + Serial
+                    let baseName = name.replace(/[^a-zA-Z]/g, "").substring(0, 5).toUpperCase();
+                    if(baseName.length < 2) baseName = "USER";
+                    const finalRefCode = baseName + serialId;
+
+                    // Save Data
+                    db.ref('users/' + uid).set({
+                        uid: uid,
+                        referralId: finalRefCode,
+                        ownId: serialId,
+                        name: name,
+                        phone: phone,
+                        email: email,
+                        balance: 50,
+                        bonus: 50,
+                        referralBonus: 0,
+                        referredBy: referredBy,
+                        createdAt: ts,
+                        updatedAt: ts,
+                        banned: false
+                    }).then(() => {
+                        // Rewards
+                        db.ref(`users/${uid}/rewards/${Date.now()}`).set({
+                            amount: 50, type: "Signup Bonus", date: new Date().toISOString()
+                        });
+
+                        // Referrer Bonus
+                        if(referredBy && referredBy !== "admin") {
+                            db.ref('users').orderByChild('referralId').equalTo(referredBy).once('value', snap => {
+                                if(snap.exists()) {
+                                    const referrerId = Object.keys(snap.val())[0];
+                                    db.ref(`users/${referrerId}/balance`).transaction(val => (val||0) + 20);
+                                    db.ref(`users/${referrerId}/referralBonus`).transaction(val => (val||0) + 20);
+                                    
+                                    db.ref(`users/${referrerId}/rewards/${Date.now()}`).set({
+                                        amount: 20, type: "Referral Bonus", fromUser: name, date: new Date().toISOString()
+                                    });
+                                }
+                            });
+                        }
+                        
+                        window.location.href = 'dashboard.html';
+                    });
+                });
+
+            }).catch(err => {
+                showToast("Error: " + err.message);
+                btn.innerText = "Register - অ্যাকাউন্ট খুলুন";
+                btn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>

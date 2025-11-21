@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referral - CASHBD</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        .ref-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed var(--primary);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            color: var(--accent);
+            font-family: 'Courier New', monospace;
+            font-size: 1.8rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- HEADER CARD -->
+        <div class="card" style="text-align:center; border-color: var(--accent);">
+            <i class="fas fa-gift" style="font-size:3rem; color:var(--accent); margin-bottom:15px;"></i>
+            <h2 style="color: white;">Invite & Earn</h2>
+            <p style="color:#888; margin:10px 0;">Share your code with friends!</p>
+            
+            <p style="font-size: 0.8rem; color: #aaa; text-transform: uppercase;">Your Referral Code</p>
+            
+            <!-- REFERRAL CODE DISPLAY -->
+            <div class="ref-box" id="refCodeDisplay">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
+
+            <button class="btn" onclick="copyCode()">
+                <i class="fas fa-copy"></i> Copy Code - কপি
+            </button>
+        </div>
+
+        <!-- STATS -->
+        <div class="stats-row">
+            <div class="stat-box">
+                <i class="fas fa-users" style="color: var(--green); font-size: 1.5rem; margin-bottom: 5px;"></i>
+                <div style="color: #888; font-size: 0.8rem;">Total Referrals</div>
+                <div id="refCount" style="font-size: 1.2rem; font-weight: bold; color: white;">0</div>
+            </div>
+            <div class="stat-box">
+                <i class="fas fa-coins" style="color: var(--primary); font-size: 1.5rem; margin-bottom: 5px;"></i>
+                <div style="color: #888; font-size: 0.8rem;">Ref Bonus</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: white;">৳ <span id="refEarn">0</span></div>
+            </div>
+        </div>
+
+        <!-- REFERRAL LIST -->
+        <div class="card">
+            <h3 style="color:var(--primary); border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:10px;">My Team</h3>
+            <table style="width:100%; font-size:0.85rem; color:#ccc;">
+                <thead>
+                    <tr style="text-align:left; color:var(--accent);">
+                        <th>Name</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody id="refTable">
+                    <tr><td colspan="2" style="text-align:center; padding:15px;">Loading team...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <!-- Navbar -->
+    <div class="navbar">
+        <a href="dashboard.html" class="nav-item"><i class="fas fa-home"></i>Home</a>
+        <a href="plans.html" class="nav-item"><i class="fas fa-rocket"></i>Plans</a>
+        <a href="deposit.html" class="nav-item"><i class="fas fa-wallet"></i>Wallet</a>
+        <a href="referral.html" class="nav-item active"><i class="fas fa-users"></i>Ref</a>
+        <a href="profile.html" class="nav-item"><i class="fas fa-user"></i>Profile</a>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="firebase.js"></script>
+    <script src="script.js"></script>
+    <script>
+        let myCode = "";
+
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                const uid = user.uid;
+                
+                // 1. FETCH USER DATA
+                db.ref('users/' + uid).on('value', snap => {
+                    const u = snap.val();
+                    if(!u) return;
+
+                    // 2. CHECK IF REFERRAL ID EXISTS
+                    if (u.referralId && u.referralId !== "undefined" && u.referralId !== "null") {
+                        // HAS CODE -> Show it
+                        myCode = u.referralId;
+                        updateUI(u);
+                    } else {
+                        // NO CODE -> GENERATE & SAVE IT (Self-Repair)
+                        console.log("Missing Referral Code. Generating...");
+                        
+                        // Logic: Email First 5 Chars + Random 3 Digits
+                        let base = (u.email || "USER").split('@')[0].replace(/[^a-zA-Z0-9]/g, "").substring(0, 5).toUpperCase();
+                        if(base.length < 3) base = "USER";
+                        const randomNum = Math.floor(100 + Math.random() * 900); // 100-999
+                        const newCode = base + randomNum;
+
+                        // Update Database
+                        db.ref('users/' + uid).update({ referralId: newCode }).then(() => {
+                            myCode = newCode;
+                            // Note: The .on() listener will trigger again automatically to update UI
+                        });
+                    }
+                });
+            }
+        });
+
+        function updateUI(u) {
+            document.getElementById('refCodeDisplay').innerText = myCode;
+            document.getElementById('refEarn').innerText = u.referralBonus || 0;
+            countMyReferrals(myCode);
+        }
+
+        function countMyReferrals(code) {
+            if(!code) return;
+
+            db.ref('users').orderByChild('referredBy').equalTo(code).on('value', snap => {
+                const tbody = document.getElementById('refTable');
+                tbody.innerHTML = '';
+
+                if (!snap.exists()) {
+                    document.getElementById('refCount').innerText = "0";
+                    tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; padding:15px;">No referrals yet.</td></tr>';
+                    return;
+                }
+
+                let count = snap.numChildren();
+                document.getElementById('refCount').innerText = count;
+
+                let list = [];
+                snap.forEach(c => list.push(c.val()));
+                
+                // Show latest 5
+                list.reverse().slice(0, 5).forEach(u => {
+                    tbody.innerHTML += `
+                    <tr style="border-bottom:1px solid #222;">
+                        <td style="padding:8px;">${u.name}</td>
+                        <td style="padding:8px; color:#888;">${new Date(u.createdAt).toLocaleDateString()}</td>
+                    </tr>`;
+                });
+            });
+        }
+
+        function copyCode() {
+            if(!myCode) return;
+            navigator.clipboard.writeText(myCode).then(() => {
+                showToast("Code Copied! — কোড কপি করা হয়েছে");
+            });
+        }
+    </script>
+</body>
+</html>

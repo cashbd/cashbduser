@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - CASHBD</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- PROFILE HEADER -->
+        <div class="card" style="margin-top: 20px; text-align: center;">
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <h2 id="pNameDisplay" style="color: white; margin-bottom: 5px;">Loading...</h2>
+                <div id="pStatus" class="status-badge badge-inactive">Checking...</div>
+            </div>
+        </div>
+
+        <!-- EDIT PERSONAL INFO -->
+        <div class="card">
+            <h3 style="color:var(--accent); margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                <i class="fas fa-user-edit"></i> Personal Info
+            </h3>
+            
+            <div class="input-group">
+                <label>Full Name (Editable)</label>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="editNameInput" placeholder="Enter Name">
+                    <button class="btn" style="width: auto; margin: 0; padding: 0 20px;" onclick="updateName()">
+                        Save
+                    </button>
+                </div>
+            </div>
+
+            <div class="info-row">
+                <span class="info-label">Phone (Fixed)</span>
+                <span class="info-val" id="pPhone">...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">User ID</span>
+                <span class="info-val" id="pUid" style="color: var(--primary);">...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Email</span>
+                <span class="info-val" id="pEmail" style="font-size: 0.8rem;">...</span>
+            </div>
+        </div>
+
+        <!-- CHANGE PASSWORD -->
+        <div class="card" style="border-color: var(--primary);">
+            <h3 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-lock"></i> Security</h3>
+            
+            <div class="input-group">
+                <label>New Password</label>
+                <input type="password" id="newPass" placeholder="Min 6 chars">
+            </div>
+            
+            <button class="btn" onclick="changePass()">Update Password</button>
+        </div>
+
+        <!-- LOGOUT -->
+        <button class="btn" style="background:var(--red); margin-top:20px; margin-bottom:30px; color:white;" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+    </div>
+
+    <!-- Navbar -->
+    <div class="navbar">
+        <a href="dashboard.html" class="nav-item"><i class="fas fa-home"></i>Home</a>
+        <a href="plans.html" class="nav-item"><i class="fas fa-rocket"></i>Plans</a>
+        <a href="deposit.html" class="nav-item"><i class="fas fa-wallet"></i>Wallet</a>
+        <a href="referral.html" class="nav-item"><i class="fas fa-users"></i>Ref</a>
+        <a href="profile.html" class="nav-item active"><i class="fas fa-user"></i>Profile</a>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="firebase.js"></script>
+    <script src="script.js"></script>
+    <script>
+        // 1. FETCH USER DATA
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                db.ref('users/' + user.uid).on('value', snap => {
+                    const u = snap.val();
+                    if(!u) return;
+
+                    // Update Display
+                    document.getElementById('pNameDisplay').innerText = u.name || "User";
+                    
+                    // Only set input value if it's empty (to prevent overwriting while typing)
+                    const nameInput = document.getElementById('editNameInput');
+                    if (document.activeElement !== nameInput) {
+                        nameInput.value = u.name || "";
+                    }
+
+                    document.getElementById('pPhone').innerText = u.phone || "N/A";
+                    document.getElementById('pEmail').innerText = u.email || user.email;
+                    document.getElementById('pUid').innerText = "#" + (u.ownId || "N/A");
+
+                    // Active Status Check
+                    let isActive = false;
+                    if (u.plans) {
+                        const now = Date.now();
+                        Object.values(u.plans).forEach(plan => {
+                            if (plan.activeUntil > now) isActive = true;
+                        });
+                    }
+
+                    const statusEl = document.getElementById('pStatus');
+                    if (isActive) {
+                        statusEl.innerText = "Active Member";
+                        statusEl.className = "status-badge badge-active";
+                    } else {
+                        statusEl.innerText = "Inactive";
+                        statusEl.className = "status-badge badge-inactive";
+                    }
+                });
+            }
+        });
+
+        // 2. UPDATE NAME FUNCTION
+        function updateName() {
+            const newName = document.getElementById('editNameInput').value.trim();
+            if(newName.length < 3) return showToast("Name too short");
+
+            db.ref('users/' + auth.currentUser.uid).update({
+                name: newName
+            }).then(() => {
+                showToast("Name Updated Successfully! — সফল");
+            }).catch(e => {
+                showToast("Error: " + e.message);
+            });
+        }
+
+        // 3. CHANGE PASSWORD FUNCTION
+        function changePass() {
+            const newPass = document.getElementById('newPass').value;
+            if (newPass.length < 6) return showToast("Password too short (Min 6)");
+            
+            auth.currentUser.updatePassword(newPass).then(() => {
+                showToast("Password Updated!");
+                document.getElementById('newPass').value = "";
+            }).catch(e => {
+                if(e.code === 'auth/requires-recent-login') {
+                    alert("Security: Please Logout & Login again to change password.");
+                    logout();
+                } else {
+                    showToast(e.message);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

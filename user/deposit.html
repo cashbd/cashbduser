@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallet - CASHBD</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Toggle Buttons -->
+        <div style="display:flex; margin-bottom:20px; background:#222; border-radius:8px; padding:5px;">
+            <div id="tabDep" class="btn" style="margin:0; border-radius:5px;" onclick="switchTab('deposit')">Deposit</div>
+            <div id="tabWith" class="btn btn-outline" style="margin:0; border-radius:5px; border:none;" onclick="switchTab('withdraw')">Withdraw</div>
+        </div>
+
+        <!-- ================= DEPOSIT SECTION ================= -->
+        <div id="depositSection">
+            <h2 style="text-align:center; color:var(--accent); margin-bottom:15px;">Select Deposit Method</h2>
+            
+            <!-- METHOD GRID -->
+            <div class="method-grid">
+                <div class="method-card method-bkash" onclick="selectDepositMethod('bkash', this)">
+                    <i class="fas fa-mobile-alt"></i> Bkash
+                </div>
+                <div class="method-card method-nagad" onclick="selectDepositMethod('nagad', this)">
+                    <i class="fas fa-paper-plane"></i> Nagad
+                </div>
+                <div class="method-card method-rocket" onclick="selectDepositMethod('rocket', this)">
+                    <i class="fas fa-rocket"></i> Rocket
+                </div>
+                <div class="method-card method-upay" onclick="selectDepositMethod('upay', this)">
+                    <i class="fas fa-wallet"></i> Upay
+                </div>
+                <div class="method-card method-binance" onclick="selectDepositMethod('binance', this)">
+                    <i class="fab fa-bitcoin"></i> Binance
+                </div>
+            </div>
+
+            <!-- INPUT FORM (Hidden by default) -->
+            <div id="depForm" class="card" style="display:none;">
+                <h3 id="selectedDepTitle" style="color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
+                    Details
+                </h3>
+
+                <div style="background:var(--glass); padding:15px; border-radius:10px; margin-bottom:15px; border:1px dashed var(--primary);">
+                    <p style="font-size:0.9rem; color:#ccc;">Send money to:</p>
+                    <h3 id="methodNumber" style="color:var(--accent); letter-spacing:1px; word-break: break-all;">...</h3>
+                    <button class="btn btn-outline" style="padding:5px; margin-top:5px; font-size:0.8rem;" onclick="copyToClipboard(document.getElementById('methodNumber').innerText)">Copy - কপি</button>
+                </div>
+
+                <div class="input-group">
+                    <label id="amountLabel">Amount (BDT)</label>
+                    <input type="number" id="depAmount" placeholder="Min: 200" oninput="calcConversion()">
+                    <!-- Live Conversion Text for Binance -->
+                    <small id="conversionText" style="color: var(--green); display: none; margin-top: 5px; font-weight: bold;"></small>
+                </div>
+
+                <div class="input-group">
+                    <label>Sender Number / ID</label>
+                    <input type="text" id="depSender" placeholder="Your Number or Pay ID">
+                </div>
+                <div class="input-group">
+                    <label>Transaction ID (TrxID)</label>
+                    <input type="text" id="depTrx" placeholder="e.g. 8X12...">
+                </div>
+                <button class="btn" onclick="submitDeposit()">Submit Deposit - জমা দিন</button>
+            </div>
+
+            <!-- Deposit History -->
+            <h3 style="margin-top: 30px; color: #fff; border-left: 4px solid var(--green); padding-left: 10px;">Deposit History</h3>
+            <div class="card" style="padding: 10px;">
+                <table style="width:100%; font-size:0.85rem; color:#ccc; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #333; color:var(--primary);">
+                            <th style="text-align:left; padding:5px;">Date</th>
+                            <th style="text-align:left; padding:5px;">Method</th>
+                            <th style="text-align:right; padding:5px;">Amount</th>
+                            <th style="text-align:right; padding:5px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="depHistoryBody"><tr><td colspan="4" style="text-align:center;">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ================= WITHDRAW SECTION ================= -->
+        <div id="withdrawSection" style="display:none;">
+            <h2 style="text-align:center; color:var(--red); margin-bottom:15px;">Select Withdraw Method</h2>
+
+            <!-- METHOD GRID -->
+            <div class="method-grid">
+                <div class="method-card method-bkash" onclick="selectWithdrawMethod('bkash', this)">
+                    <i class="fas fa-mobile-alt"></i> Bkash
+                </div>
+                <div class="method-card method-nagad" onclick="selectWithdrawMethod('nagad', this)">
+                    <i class="fas fa-paper-plane"></i> Nagad
+                </div>
+                <div class="method-card method-rocket" onclick="selectWithdrawMethod('rocket', this)">
+                    <i class="fas fa-rocket"></i> Rocket
+                </div>
+                <div class="method-card method-upay" onclick="selectWithdrawMethod('upay', this)">
+                    <i class="fas fa-wallet"></i> Upay
+                </div>
+                <div class="method-card method-binance" onclick="selectWithdrawMethod('binance', this)">
+                    <i class="fab fa-bitcoin"></i> Binance
+                </div>
+            </div>
+            
+            <!-- Withdraw Form -->
+            <div id="withForm" class="card" style="display:none;">
+                <h3 id="selectedWithTitle" style="color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
+                    Withdraw Request
+                </h3>
+                <div class="input-group">
+                    <label>Amount (BDT)</label>
+                    <input type="number" id="withAmount" placeholder="Min 200">
+                </div>
+                <div class="input-group">
+                    <label>Wallet Number / ID</label>
+                    <input type="text" id="withNumber" placeholder="01XXXXXXXXX">
+                </div>
+                <button class="btn" style="background:var(--red); color:white;" onclick="submitWithdraw()">Request Withdraw - উত্তোলন</button>
+            </div>
+
+            <!-- Withdrawal History -->
+            <h3 style="margin-top: 30px; color: #fff; border-left: 4px solid var(--red); padding-left: 10px;">Withdrawal History</h3>
+            <div class="card" style="padding: 10px;">
+                <table style="width:100%; font-size:0.85rem; color:#ccc; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #333; color:var(--red);">
+                            <th style="text-align:left; padding:5px;">Date</th>
+                            <th style="text-align:left; padding:5px;">To</th>
+                            <th style="text-align:right; padding:5px;">Amount</th>
+                            <th style="text-align:right; padding:5px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="withHistoryBody"><tr><td colspan="4" style="text-align:center;">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="navbar">
+        <a href="dashboard.html" class="nav-item"><i class="fas fa-home"></i>Home</a>
+        <a href="plans.html" class="nav-item"><i class="fas fa-rocket"></i>Plans</a>
+        <a href="deposit.html" class="nav-item active"><i class="fas fa-wallet"></i>Wallet</a>
+        <a href="referral.html" class="nav-item"><i class="fas fa-users"></i>Ref</a>
+        <a href="profile.html" class="nav-item"><i class="fas fa-user"></i>Profile</a>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="firebase.js"></script>
+    <script src="script.js"></script>
+    <script>
+        let allowedMethods = {};
+        let currentDepMethod = "";
+        let currentWithMethod = "";
+        const DOLLAR_RATE = 125; // 1 Dollar = 125 Taka
+
+        // 1. HANDLE TABS
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.get('mode') === 'withdraw') switchTab('withdraw');
+            else switchTab('deposit');
+            if(urlParams.get('amount')) document.getElementById('depAmount').value = urlParams.get('amount');
+        });
+
+        function switchTab(tab) {
+            document.getElementById('depositSection').style.display = tab === 'deposit' ? 'block' : 'none';
+            document.getElementById('withdrawSection').style.display = tab === 'withdraw' ? 'block' : 'none';
+            document.getElementById('tabDep').className = tab === 'deposit' ? 'btn' : 'btn btn-outline';
+            document.getElementById('tabWith').className = tab === 'withdraw' ? 'btn' : 'btn btn-outline';
+        }
+
+        // 2. SELECT DEPOSIT METHOD (Binance Logic Added)
+        function selectDepositMethod(method, el) {
+            document.querySelectorAll('#depositSection .method-card').forEach(d => d.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('depForm').style.display = 'block';
+            
+            currentDepMethod = method;
+            document.getElementById('selectedDepTitle').innerText = "Deposit via " + method.toUpperCase();
+            
+            const label = document.getElementById('amountLabel');
+            const input = document.getElementById('depAmount');
+            const convText = document.getElementById('conversionText');
+
+            // CONFIG: Min Amounts & Labels
+            if(method === 'binance') {
+                label.innerText = "Amount (USD)";
+                input.placeholder = "Min: $2";
+                convText.style.display = "block";
+                convText.innerText = `Rate: $1 = ${DOLLAR_RATE} BDT`;
+            } else {
+                label.innerText = "Amount (BDT)";
+                input.placeholder = "Min: 200";
+                convText.style.display = "none";
+            }
+
+            // Show Number
+            if(allowedMethods[method]) {
+                document.getElementById('methodNumber').innerText = allowedMethods[method].number;
+            } else {
+                document.getElementById('methodNumber').innerText = "Not Available";
+            }
+        }
+
+        // Live Conversion Calculator
+        function calcConversion() {
+            if (currentDepMethod === 'binance') {
+                const usd = parseFloat(document.getElementById('depAmount').value) || 0;
+                const bdt = usd * DOLLAR_RATE;
+                document.getElementById('conversionText').innerText = `$${usd} = ${bdt} BDT (Rate: ${DOLLAR_RATE})`;
+            }
+        }
+
+        // 3. SELECT WITHDRAW METHOD
+        function selectWithdrawMethod(method, el) {
+            document.querySelectorAll('#withdrawSection .method-card').forEach(d => d.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('withForm').style.display = 'block';
+            currentWithMethod = method;
+            document.getElementById('selectedWithTitle').innerText = "Withdraw to " + method.toUpperCase();
+        }
+
+        // 4. SUBMIT DEPOSIT (Binance $2 / Others 200 BDT)
+        function submitDeposit() {
+            if(!currentDepMethod) return showToast("Select a method");
+            
+            const rawAmount = parseFloat(document.getElementById('depAmount').value);
+            const sender = document.getElementById('depSender').value;
+            const trx = document.getElementById('depTrx').value;
+
+            if(!rawAmount || !sender || !trx) return showToast("Fill all fields");
+
+            let finalAmountBDT = rawAmount;
+
+            // VALIDATION LOGIC
+            if (currentDepMethod === 'binance') {
+                if (rawAmount < 2) return alert("Minimum Deposit for Binance is $2");
+                finalAmountBDT = rawAmount * DOLLAR_RATE; // Convert to BDT
+            } else {
+                if (rawAmount < 200) return alert("Minimum Deposit is 200 BDT");
+            }
+
+            const depId = db.ref('deposits').push().key;
+            db.ref('deposits/' + depId).set({
+                id: depId, userId: auth.currentUser.uid,
+                method: currentDepMethod, 
+                methodNumberShown: allowedMethods[currentDepMethod]?.number || "",
+                numberSentFrom: sender, 
+                trxId: trx, 
+                amount: finalAmountBDT, // Save converted BDT
+                originalAmount: rawAmount, // Save what they typed
+                currency: currentDepMethod === 'binance' ? 'USD' : 'BDT',
+                status: 'pending', 
+                date: new Date().toISOString()
+            }).then(() => {
+                alert(`Deposit Submitted! ${currentDepMethod === 'binance' ? '($' + rawAmount + ' -> ' + finalAmountBDT + ' BDT)' : ''}`);
+                window.location.reload();
+            });
+        }
+
+        function submitWithdraw() {
+            if(!currentWithMethod) return showToast("Select a method");
+            const amount = document.getElementById('withAmount').value;
+            const number = document.getElementById('withNumber').value;
+
+            if(!amount || !number) return showToast("Fill all fields");
+            if(parseFloat(amount) < 200) return alert("Minimum Withdraw is 200 BDT");
+
+            db.ref('users/' + auth.currentUser.uid).once('value', snap => {
+                const u = snap.val();
+                if(parseFloat(u.balance) < parseFloat(amount)) return alert("Insufficient Balance");
+
+                const wId = db.ref('withdrawals').push().key;
+                db.ref('withdrawals/' + wId).set({
+                    id: wId, userId: auth.currentUser.uid,
+                    method: currentWithMethod, withdrawNumber: number, amount: parseFloat(amount),
+                    status: 'pending', date: new Date().toISOString()
+                }).then(() => {
+                    alert("Withdraw Submitted!");
+                    window.location.reload();
+                });
+            });
+        }
+
+        // 5. DATA FETCHING
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                db.ref('settings').once('value', snap => {
+                    const s = snap.val();
+                    allowedMethods = s.allowedMethods || {};
+                });
+                loadHistory('deposits', 'depHistoryBody', user.uid);
+                loadHistory('withdrawals', 'withHistoryBody', user.uid);
+            }
+        });
+
+        function loadHistory(node, tableId, uid) {
+            db.ref(node).orderByChild('userId').equalTo(uid).on('value', snap => {
+                const tbody = document.getElementById(tableId);
+                tbody.innerHTML = '';
+                if(!snap.exists()) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:10px;">No records.</td></tr>';
+                    return;
+                }
+                let list = [];
+                snap.forEach(c => list.push(c.val()));
+                list.reverse().forEach(d => {
+                    const color = d.status === 'approved' ? 'var(--green)' : (d.status === 'rejected' ? 'var(--red)' : 'var(--accent)');
+                    tbody.innerHTML += `
+                    <tr style="border-bottom:1px solid #222;">
+                        <td style="padding:8px;">${new Date(d.date).toLocaleDateString()}</td>
+                        <td style="padding:8px; text-transform:uppercase;">${d.method}</td>
+                        <td style="padding:8px; text-align:right;">৳${d.amount}</td>
+                        <td style="padding:8px; text-align:right; color:${color};">${d.status}</td>
+                    </tr>`;
+                });
+            });
+        }
+    </script>
+</body>
+</html>
